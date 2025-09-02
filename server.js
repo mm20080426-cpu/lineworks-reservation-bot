@@ -40,8 +40,19 @@ function verifySignature(reqBody, signatureHeader, botSecret) {
   return expectedSignature === signatureHeader;
 }
 
+// 🔽 ここに追加
+app.get('/lineworks/callback', (req, res) => {
+  console.log('👀 GETリクエスト受信:', req.query);
+console.log('🔐 JWT:', token);
+console.log('🌐 POST先URL:', 'https://auth.worksmobile.com/oauth2/v2.0/token');
+  res.send('✅ GETリクエスト受信しました');
+});
+
 // Webhook受信エンドポイント
 app.post('/lineworks/callback', async (req, res) => {
+// 🔍 ここでリクエストボディをログ出力
+  console.log('📦 受信したリクエストボディ:', req.body);
+ 
   const signatureHeader = req.headers['x-works-signature'];
 
   if (!verifySignature(req.body, signatureHeader, BOT_SECRET)) {
