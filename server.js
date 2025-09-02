@@ -1,62 +1,102 @@
-// .envファイルから環境変数を読み込む（ローカル開発用）
 require('dotenv').config();
 
 const express = require('express');
 const axios = require('axios');
+const crypto = require('crypto');
+const fetchAccessToken = require('./tokenFetcher');
+
 const app = express();
+app.use(express.json());
 
 const BOT_ID = process.env.BOT_ID;
 const BOT_SECRET = process.env.BOT_SECRET;
 
-// リクエストボディをJSON形式で受け取れるように設定
-app.use(express.json());
+// 時間枠の生成（9:00〜12:00、15分単位）
+function generateTimeSlots(startHour = 9, endHour = 12, interval = 15) {
+  const slots = [];
+  let current = new Date();
+  current.setHours(startHour, 0, 0, 0);
 
-// Callback URLのパスを指定
+  while (current.getHours() < endHour) {
+    const start = new Date(current);
+    current.setMinutes(current.getMinutes() + interval);
+    const end = new Date(current);
+    slots.push(`${formatTime(start)}〜${formatTime(end)}`);
+  }
+
+  return slots;
+}
+
+function formatTime(date) {
+  return `${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+// 署名検証関数
+function verifySignature(reqBody, signatureHeader, botSecret) {
+  const bodyString = JSON.stringify(reqBody);
+  const hmac = crypto.createHmac('sha256', botSecret);
+  hmac.update(bodyString);
+  const expectedSignature = hmac.digest('base64');
+  return expectedSignature === signatureHeader;
+}
+
+// Webhook受信エンドポイント
 app.post('/lineworks/callback', async (req, res) => {
-    // セキュリティのため、リクエストの検証ロジックをここに実装
-    // 'X-WORKS-Signature' ヘッダーと Bot Secret を使って署名を検証します。
+  const signatureHeader = req.headers['x-works-signature'];
 
-    const event = req.body;
-    
-    // メッセージイベントか確認
-    if (event.type === 'message') {
-        const messageContent = event.content.text;
-        const senderId = event.source.userId;
+  if (!verifySignature(req.body, signatureHeader, BOT_SECRET)) {
+    console.warn('⚠️ 不正な署名: リクエスト拒否');
+    return res.sendStatus(403);
+  }
 
-        let replyText = '「予約」または「確認」と入力してください。';
+  const event = req.body;
 
-        if (messageContent.includes('予約')) {
-            replyText = '診察のご予約ですね。ご希望の診察科をお選びください。';
-        } else if (messageContent.includes('確認')) {
-            replyText = '現在の予約状況をお調べします。';
-        }
+  if (event.type === 'message') {
+    const messageContent = event.content.text.trim();
+    const senderId = event.source.userId;
+    let replyText = '「予約」または「確認」と入力してください。';
 
-        // LINE WORKS Messaging APIを使って返信
-        try {
-            await axios.post(`https://api.line.worksmobile.com/bot/v1/message/push`, {
-                "userId": senderId,
-                "content": {
-                    "type": "text",
-                    "text": replyText
-                }
-            }, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${BOT_SECRET}`, // Bot Secret を使って認証
-                    'x-works-botid': BOT_ID
-                }
-            });
-            console.log(`返信成功: ${replyText}`);
-        } catch (error) {
-            console.error('返信エラー:', error.response ? error.response.data : error.message);
-        }
+    // 「予約」と入力された場合、時間枠を提示
+    if (messageContent.includes('予約')) {
+      const slots = generateTimeSlots();
+      replyText = '診察のご予約ですね。以下の時間枠から番号でお選びください。\n' +
+                  slots.map((slot, i) => `${i + 1}. ${slot}`).join('\n');
     }
 
-    res.sendStatus(200); // LINE WORKSに成功を通知
+    // 数字で時間枠を選択された場合
+    const selectedIndex = parseInt(messageContent);
+    if (!isNaN(selectedIndex) && selectedIndex >= 1 && selectedIndex <= 12) {
+      const selectedSlot = generateTimeSlots()[selectedIndex - 1];
+      replyText = `✅ ${selectedSlot}で予約を承りました。\n担当医：佐藤先生`;
+    }
+
+    try {
+      const accessToken = await fetchAccessToken();
+
+      await axios.post(`https://www.worksapis.com/v1.0/bots/${BOT_ID}/messages`, {
+        accountId: senderId,
+        content: {
+          type: 'text',
+          text: replyText
+        }
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`
+        }
+      });
+
+      console.log(`✅ 返信成功: ${replyText}`);
+    } catch (error) {
+      console.error('❌ 返信エラー:', error.response?.data || error.message);
+    }
+  }
+
+  res.sendStatus(200);
 });
 
 // サーバー起動
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
-    console.log(`Server is running on port ${port}`);
+  console.log(`🚀 Server is running on port ${port}`);
 });
