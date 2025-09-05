@@ -1,12 +1,14 @@
-// userFetcher.js
 const axios = require('axios');
+require('dotenv').config();
 
 /**
  * userIdからaccountIdを取得する関数
  */
 async function getAccountIdFromUserId(userId, accessToken) {
   try {
-    const url = `https://www.worksapis.com/v1.0/users/${encodeURIComponent(userId)}`;
+    const baseUrl = process.env.LW_API_BASE_URL || 'https://www.worksapis.com';
+    const url = `${baseUrl}/v1.0/users/${encodeURIComponent(userId)}`;
+
     const headers = {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json'

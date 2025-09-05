@@ -9,8 +9,9 @@ const getAccountIdFromUserId = require('./userFetcher');
 const app = express();
 app.use(express.json());
 
-const BOT_ID = process.env.BOT_ID;
-const BOT_SECRET = process.env.BOT_SECRET;
+// .env に合わせて修正
+const BOT_ID = process.env.LW_BOT_ID;
+const BOT_SECRET = process.env.LW_BOT_SECRET;
 
 // 署名検証
 function verifySignature(reqBody, signatureHeader, botSecret) {
@@ -77,25 +78,4 @@ app.post('/lineworks/callback', async (req, res) => {
 
     await axios.post(`https://www.worksapis.com/v1.0/bots/${BOT_ID}/users/${accountId}/messages`, {
       accountId,
-      content: { type: 'text', text: replyText }
-    }, {
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    console.log(`[INFO] メッセージ送信完了: ${replyText}`);
-  } catch (error) {
-    const errorMsg = error.response?.data || error.message;
-    console.error('[ERROR] メッセージ送信失敗:', errorMsg);
-  }
-
-  res.sendStatus(200);
-});
-
-// サーバー起動
-const port = process.env.PORT || 3000;
-app.listen(port, () => {
-  console.log(`[INFO] Server is running on port ${port}`);
-});
+      content

@@ -1,29 +1,25 @@
 const { google } = require('googleapis');
-const path = require('path');
+require('dotenv').config(); // 環境変数の読み込み
 
-// JSON鍵のパス（プロジェクトルートに配置している前提）
-const KEYFILEPATH = path.join(__dirname, 'google-credentials.json');
+// 改行コードの復元が重要！
+const privateKey = process.env.GS_PRIVATE_KEY.replace(/\\n/g, '\n');
 
-// 対象のスプレッドシートID（URLの中にあるID）
-const SPREADSHEET_ID = 'あなたのスプレッドシートIDをここに';
+const auth = new google.auth.JWT(
+  process.env.GS_CLIENT_EMAIL,
+  null,
+  privateKey,
+  ['https://www.googleapis.com/auth/spreadsheets']
+);
 
-// 認証クライアントの作成
-const auth = new google.auth.GoogleAuth({
-  keyFile: KEYFILEPATH,
-  scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-});
+const sheets = google.sheets({ version: 'v4', auth });
 
-// データ書き込み関数
 async function writeReservationData(dataArray) {
-  const client = await auth.getClient();
-  const sheets = google.sheets({ version: 'v4', auth: client });
-
   const request = {
-    spreadsheetId: SPREADSHEET_ID,
-    range: '予約データ!A1', // シート名と範囲
+    spreadsheetId: process.env.GS_SHEET_ID,
+    range: '予約データ!A1',
     valueInputOption: 'USER_ENTERED',
     resource: {
-      values: dataArray, // 例: [['2025/09/05', '田中太郎', '10:00']]
+      values: dataArray,
     },
   };
 
@@ -31,7 +27,7 @@ async function writeReservationData(dataArray) {
     const response = await sheets.spreadsheets.values.append(request);
     console.log('✅ 書き込み成功:', response.data.updates);
   } catch (error) {
-    console.error('❌ 書き込み失敗:', error);
+    console.error('❌ 書き込み失敗:', error.response?.data || error.message);
   }
 }
 
