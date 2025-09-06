@@ -76,6 +76,31 @@ app.post('/lineworks/callback', async (req, res) => {
       return res.sendStatus(400);
     }
 
-    await axios.post(`https://www.worksapis.com/v1.0/bots/${BOT_ID}/users/${accountId}/messages`, {
-      accountId,
-      content
+        await axios.post(
+  `https://www.worksapis.com/v1.0/bots/${BOT_ID}/users/${accountId}/messages`,
+  {
+    accountId,
+    content: {
+      type: 'text',
+      text: replyText
+    }
+  },
+  {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json'
+    }
+  }
+);
+
+    res.sendStatus(200);
+  } catch (error) {
+    console.error('[ERROR] メッセージ送信失敗:', error);
+    res.sendStatus(500);
+  }
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`[INFO] Server is running on port ${PORT}`);
+});
