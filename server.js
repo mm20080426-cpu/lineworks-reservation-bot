@@ -3,15 +3,18 @@ const express = require('express');
 const axios = require('axios');
 const crypto = require('crypto');
 const { registerReservation } = require('./reservationService');
+const { getAvailableTimeSlots } = require('./calendarUtils');
 const fetchAccessToken = require('./tokenFetcher');
 const getAccountIdFromUserId = require('./userFetcher');
 
 const app = express();
 app.use(express.json());
 
-// .env に合わせて修正
 const BOT_ID = process.env.LW_BOT_ID;
 const BOT_SECRET = process.env.LW_BOT_SECRET;
+
+// ユーザー状態管理
+const userState = new Map();
 
 // 署名検証
 function verifySignature(reqBody, signatureHeader, botSecret) {
@@ -22,22 +25,27 @@ function verifySignature(reqBody, signatureHeader, botSecret) {
   return expectedSignature === signatureHeader;
 }
 
-// 時間枠生成
-function generateTimeSlots(startHour = 9, endHour = 12, interval = 15) {
-  const slots = [];
-  let current = new Date();
-  current.setHours(startHour, 0, 0, 0);
-  while (current.getHours() < endHour) {
-    const start = new Date(current);
-    current.setMinutes(current.getMinutes() + interval);
-    const end = new Date(current);
-    slots.push(`${formatTime(start)}〜${formatTime(end)}`);
-  }
-  return slots;
-}
+// 日付抽出関数
+function extractDate(messageText) {
+  const fullDateRegex = /(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})日?/;
+  const shortDateRegex = /(\d{1,2})[\/月](\d{1,2})日?/;
 
-function formatTime(date) {
-  return `${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`;
+  let yyyy, mm, dd;
+  const fullMatch = messageText.match(fullDateRegex);
+  if (fullMatch) {
+    yyyy = fullMatch[1];
+    mm = fullMatch[2].padStart(2, '0');
+    dd = fullMatch[3].padStart(2, '0');
+  } else {
+    const shortMatch = messageText.match(shortDateRegex);
+    if (shortMatch) {
+      yyyy = new Date().getFullYear();
+      mm = shortMatch[1].padStart(2, '0');
+      dd = shortMatch[2].padStart(2, '0');
+    }
+  }
+
+  return yyyy && mm && dd ? `${yyyy}-${mm}-${dd}` : null;
 }
 
 // Webhook受信
@@ -55,19 +63,83 @@ app.post('/lineworks/callback', async (req, res) => {
   const userId = event.source?.userId;
   let replyText = '「予約」と入力すると時間枠を表示します。';
 
-  if (messageText.includes('予約')) {
-    const slots = generateTimeSlots();
-    replyText = '診察のご予約ですね。以下の時間枠から番号でお選びください。\n' +
-                slots.map((slot, i) => `${i + 1}. ${slot}`).join('\n');
+  const state = userState.get(userId);
+
+  // ステップ①：「予約」入力 → 日付入力を促す
+  if (messageText === '予約') {
+    userState.set(userId, { step: 'awaitingDate' });
+    replyText = '📅 日付を入力してください（例：9/11 または 2025/9/11）';
   }
 
-  const selectedIndex = parseInt(messageText);
-  if (!isNaN(selectedIndex) && selectedIndex >= 1 && selectedIndex <= 12) {
-    const selectedSlot = generateTimeSlots()[selectedIndex - 1];
-    replyText = registerReservation(userId, selectedSlot);
-    console.log(`[INFO] 予約登録: userId=${userId}, slot=${selectedSlot}`);
+  // ステップ②：日付入力 → 枠表示
+  else if (state?.step === 'awaitingDate') {
+    const selectedDate = extractDate(messageText);
+    if (!selectedDate) {
+      replyText = '⚠️ 日付の形式が正しくありません。もう一度入力してください（例：9/11 または 2025/9/11）';
+    } else {
+      const slots = getAvailableTimeSlots(selectedDate);
+      if (!slots || slots.length === 0) {
+        replyText = `🚫 ${selectedDate} は休診日です。別の日を選んでください。`;
+      } else {
+        userState.set(userId, {
+          step: 'dateSelected',
+          selectedDate,
+          availableSlots: slots
+        });
+
+        replyText = `📅 ${selectedDate} の予約枠です。番号でお選びください。\n` +
+                    slots.map((slot, i) => `${i + 1}. ${slot}`).join('\n');
+      }
+    }
   }
 
+  // ステップ③：枠番号選択 → 名前入力へ
+  else if (state?.step === 'dateSelected' && /^\d+$/.test(messageText)) {
+    const index = parseInt(messageText) - 1;
+    const selectedSlot = state.availableSlots[index];
+
+    if (selectedSlot) {
+      userState.set(userId, {
+        ...state,
+        step: 'awaitingName',
+        selectedSlot
+      });
+
+      replyText = `✅ ${state.selectedDate} の ${selectedSlot} を選択しました。\n👤 お名前を入力してください。`;
+    } else {
+      replyText = `⚠️ 有効な番号を選択してください。`;
+    }
+  }
+
+  // ステップ④：名前入力 → 備考入力へ
+  else if (state?.step === 'awaitingName') {
+    const name = messageText;
+    userState.set(userId, {
+      ...state,
+      step: 'awaitingNote',
+      name
+    });
+
+    replyText = `📝 備考があれば入力してください（未入力でもOKです）。`;
+  }
+
+  // ステップ⑤：備考入力（または空） → 予約確定
+  else if (state?.step === 'awaitingNote') {
+    const note = messageText || 'なし';
+
+    replyText = await registerReservation(
+      userId,
+      state.selectedDate,
+      state.selectedSlot,
+      state.name,
+      note
+    );
+
+    console.log(`[INFO] 予約登録: userId=${userId}, date=${state.selectedDate}, slot=${state.selectedSlot}, name=${state.name}, note=${note}`);
+    userState.delete(userId);
+  }
+
+  // LINE WORKS へ返信
   try {
     const accessToken = await fetchAccessToken();
     const accountId = await getAccountIdFromUserId(userId, accessToken);
@@ -76,22 +148,22 @@ app.post('/lineworks/callback', async (req, res) => {
       return res.sendStatus(400);
     }
 
-        await axios.post(
-  `https://www.worksapis.com/v1.0/bots/${BOT_ID}/users/${accountId}/messages`,
-  {
-    accountId,
-    content: {
-      type: 'text',
-      text: replyText
-    }
-  },
-  {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
-    }
-  }
-);
+    await axios.post(
+      `https://www.worksapis.com/v1.0/bots/${BOT_ID}/users/${accountId}/messages`,
+      {
+        accountId,
+        content: {
+          type: 'text',
+          text: replyText
+        }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
 
     res.sendStatus(200);
   } catch (error) {

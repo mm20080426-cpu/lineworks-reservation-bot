@@ -7,3 +7,4 @@ private.key
 *.crt
 *.env.local
 .DS_Store
+google-credentials.json
