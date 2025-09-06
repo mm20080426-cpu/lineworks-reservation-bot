@@ -1,0 +1,10 @@
+.env
+google-credentials.json
+node_modules/
+private.key
+*.log
+*.pem
+*.crt
+*.env.local
+.DS_Store
+google-credentials.json
