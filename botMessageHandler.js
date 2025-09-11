@@ -33,11 +33,11 @@ async function handleBotMessage(userId, messageText) {
       return `📭 ${selectedDate} の予約はありません。`;
     }
 
-    const idMap = {}; // 番号 → 予約ID
+    const idMap = {};
     const displayList = rawReservations.map((r, i) => {
       const reservationId = r[0];
       idMap[i + 1] = reservationId;
-      return `🕒 ${r[3]}｜👤 ${r[4]}｜📝 ${r[5]}｜予約枠ID: ${reservationId}`;
+      return `${i + 1}. 🕒 ${r[2]}｜👤 ${r[3]}｜📝 ${r[4]}｜予約枠ID: ${reservationId}`;
     });
 
     cancelContext.set(userId, {
@@ -48,7 +48,7 @@ async function handleBotMessage(userId, messageText) {
     });
 
     return `🕒 ${selectedDate} のキャンセルしたい予約を番号で選んでください（例：1）\n📋 予約一覧:\n` +
-           displayList.map((r, i) => `${i + 1}. ${r}`).join('\n');
+           displayList.join('\n');
   }
 
   // ステップ②：番号選択
@@ -58,7 +58,10 @@ async function handleBotMessage(userId, messageText) {
 
     const reservationId = idMap[selectedNumber];
     if (!reservationId) {
-      return '⚠️ 有効な番号を入力してください。';
+      const retryList = rawReservations.map((r, i) => {
+        return `${i + 1}. 🕒 ${r[2]}｜👤 ${r[3]}｜📝 ${r[4]}｜予約枠ID: ${r[0]}`;
+      });
+      return `⚠️ 有効な番号を入力してください。\n📋 最新の予約一覧:\n` + retryList.join('\n');
     }
 
     const matched = rawReservations.find(r => r[0] === reservationId);
@@ -66,8 +69,8 @@ async function handleBotMessage(userId, messageText) {
       return '⚠️ 対象の予約が見つかりません。';
     }
 
-    const timeSlot = matched[3];
-    const selectedDate = cancelDate;
+    const selectedDate = matched[1];
+    const timeSlot = matched[2];
 
     console.log('[DEBUG] cancelReservation() 呼び出し:', {
       userId,
@@ -77,7 +80,13 @@ async function handleBotMessage(userId, messageText) {
     });
 
     cancelContext.delete(userId);
-    return await cancelReservation(userId, reservationId, selectedDate, timeSlot);
+    const result = await cancelReservation(userId, reservationId, selectedDate, timeSlot);
+
+    if (result?.success) {
+      return `✅ キャンセルしました：🕒 ${timeSlot}｜👤 ${matched[3]}｜📝 ${matched[4]}`;
+    } else {
+      return `⚠️ キャンセルに失敗しました：🕒 ${timeSlot}｜👤 ${matched[3]}｜📝 ${matched[4]}`;
+    }
   }
 
   // 通常コマンド処理
@@ -101,7 +110,7 @@ async function handleBotMessage(userId, messageText) {
       const date = rawDate.includes('/') ? rawDate : null;
       const list = await getReservationsByDate(date);
       return list.length > 0
-        ? list.map(r => `🕒 ${r[3]}｜👤 ${r[4]}｜📝 ${r[5]}｜予約枠ID: ${r[0]}`).join('\n')
+        ? list.map(r => `🕒 ${r[2]}｜👤 ${r[3]}｜📝 ${r[4]}｜予約枠ID: ${r[0]}`).join('\n')
         : `📭 ${date} の予約はありません。`;
     }
 
