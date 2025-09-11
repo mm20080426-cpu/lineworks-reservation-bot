@@ -21,8 +21,7 @@ async function getAccessToken() {
       assertion: token,
       client_id: process.env.LW_CLIENT_ID,
       client_secret: process.env.LW_CLIENT_SECRET,
-      #scope: process.env.LW_SCOPE
-    });
+ });
 
     const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
     const { data } = await axios.post(url, params, { headers });
