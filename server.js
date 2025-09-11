@@ -254,18 +254,39 @@ else if (state?.step === 'awaitingCancelSelection') {
     console.log('[DEBUG] キャンセル対象:', selectedItem);
     console.log('[DEBUG] 抽出された時間枠:', cancelTime);
 
-    const cancelMessage = await cancelReservation(userId, state.cancelDate, cancelTime);
-    console.log('[DEBUG] キャンセル結果メッセージ:', cancelMessage);
+    // ✅ rawデータから照合して予約IDを取得
+    const rawReservations = await getReservationsByDateRaw(state.cancelDate);
+    const matched = rawReservations.find(r => {
+      const sheetTime = r[3]?.replace(/〜|～|~|-/g, '〜').trim();
+      return sheetTime === cancelTime;
+    });
 
-    await new Promise(resolve => setTimeout(resolve, 500));
-    const updatedList = await getReservationsByDate(state.cancelDate);
-    const numberedUpdatedList = updatedList.map((item, i) => `${i + 1}. ${item}`);
+    if (!matched) {
+      replyText = `⚠️ ${state.cancelDate} の ${cancelTime} に一致する予約が見つかりませんでした。`;
+    } else {
+      const reservationId = matched[0];
+      const selectedDate = matched[2];
+      const timeSlot = matched[3];
 
-    replyText =
-      `${cancelMessage}\n\n📋 最新の予約一覧:\n` +
-      (numberedUpdatedList.length ? numberedUpdatedList.join('\n') : '📭 予約はありません。');
+      const cancelMessage = await cancelReservation(userId, reservationId, selectedDate, timeSlot);
+      console.log('[DEBUG] cancelReservation() 呼び出し:', {
+        userId,
+        reservationId,
+        selectedDate,
+        timeSlot
+      });
+      console.log('[DEBUG] キャンセル結果メッセージ:', cancelMessage);
 
-    userState.delete(userId);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const updatedList = await getReservationsByDate(state.cancelDate);
+      const numberedUpdatedList = updatedList.map((item, i) => `${i + 1}. ${item}`);
+
+      replyText =
+        `${cancelMessage}\n\n📋 最新の予約一覧:\n` +
+        (numberedUpdatedList.length ? numberedUpdatedList.join('\n') : '📭 予約はありません。');
+
+      userState.delete(userId);
+    }
   }
 }
 
