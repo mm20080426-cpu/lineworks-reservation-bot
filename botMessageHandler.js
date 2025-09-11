@@ -86,6 +86,9 @@ async function handleBotMessage(userId, messageText) {
       timeSlot
     });
 
+// ここに新しいデバッグ行を追加
+console.log('[DEBUG] ### NEW_DEBUG_MARKER_V1 ###'); // この行を追加する
+
     if (!reservationId || !timeSlot || !selectedDate) {
       console.warn('[WARN] キャンセル対象の情報が不完全です:', {
         reservationId,
