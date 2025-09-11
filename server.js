@@ -7,7 +7,8 @@ const {
   registerReservation,
   cancelReservation,
   getReservationsByDate,
-  getAvailableSlots // ← 追加済み！
+  getReservationsByDateRaw, // ← これを追加！
+  getAvailableSlots
 } = require('./reservationService');
 const { getAvailableTimeSlots } = require('./calendarUtils');
 const fetchAccessToken = require('./tokenFetcher');
