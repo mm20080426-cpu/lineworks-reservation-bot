@@ -7,19 +7,7 @@ const {
 } = require('./reservationService');
 const { getAvailableTimeSlots } = require('./calendarUtils');
 
-// 時間枠抽出
-function extractTimeSlot(text) {
-  if (!text || typeof text !== 'string') return null;
-  const cleaned = text.replace(/\s/g, '').replace(/[〜~\-]/g, '〜');
-  const match = cleaned.match(/(\d{1,2}:\d{2})〜(\d{1,2}:\d{2})/);
-  if (match) {
-    const [, start, end] = match;
-    return start < end ? `${start}〜${end}` : `${end}〜${start}`;
-  }
-  return null;
-}
-
-// 予約枠ID抽出
+// 予約枠ID抽出（柔軟化：6文字以上の英数字＋ハイフン）
 function extractReservationId(text) {
   const match = text.match(/予約枠ID[:：]?\s*([a-zA-Z0-9\-]{6,})/);
   return match ? match[1].trim() : null;
@@ -38,45 +26,47 @@ async function handleBotMessage(userId, messageText) {
     console.log('[DEBUG] ステップ①で受け取った selectedDate:', selectedDate);
 
     const rawReservations = await getReservationsByDateRaw(selectedDate);
-    console.log('[DEBUG] getReservationsByDateRaw - filtered:', rawReservations);
+    console.log('[DEBUG] キャンセル対象日の予約一覧:', rawReservations);
 
     if (rawReservations.length === 0) {
       cancelContext.delete(userId);
       return `📭 ${selectedDate} の予約はありません。`;
     }
 
-    const originalList = rawReservations.map(r => {
+    const idMap = {}; // 番号 → 予約ID
+    const displayList = rawReservations.map((r, i) => {
       const reservationId = r[0];
-      const timeSlot = r[3];
-      const name = r[4];
-      const note = r[5];
-      return `🕒 ${timeSlot}｜👤 ${name}｜📝 ${note}｜予約枠ID: ${reservationId}`;
+      idMap[i + 1] = reservationId;
+      return `🕒 ${r[3]}｜👤 ${r[4]}｜📝 ${r[5]}｜予約枠ID: ${reservationId}`;
     });
 
     cancelContext.set(userId, {
       step: 'awaitingCancelSelection',
       cancelDate: selectedDate,
-      originalList
+      idMap,
+      rawReservations
     });
 
     return `🕒 ${selectedDate} のキャンセルしたい予約を番号で選んでください（例：1）\n📋 予約一覧:\n` +
-           originalList.map((r, i) => `${i + 1}. ${r}`).join('\n');
+           displayList.map((r, i) => `${i + 1}. ${r}`).join('\n');
   }
 
   // ステップ②：番号選択
   if (context?.step === 'awaitingCancelSelection') {
-    const index = parseInt(messageText.trim(), 10) - 1;
-    const { originalList, cancelDate } = context;
+    const selectedNumber = parseInt(messageText.trim(), 10);
+    const { idMap, rawReservations, cancelDate } = context;
 
-    if (isNaN(index) || !originalList[index]) {
+    const reservationId = idMap[selectedNumber];
+    if (!reservationId) {
       return '⚠️ 有効な番号を入力してください。';
     }
 
-    const selectedRaw = originalList[index];
-    console.log('[DEBUG] キャンセル対象:', selectedRaw);
+    const matched = rawReservations.find(r => r[0] === reservationId);
+    if (!matched) {
+      return '⚠️ 対象の予約が見つかりません。';
+    }
 
-    const reservationId = extractReservationId(selectedRaw);
-    const timeSlot = extractTimeSlot(selectedRaw);
+    const timeSlot = matched[3];
     const selectedDate = cancelDate;
 
     console.log('[DEBUG] cancelReservation() 呼び出し:', {
@@ -85,18 +75,6 @@ async function handleBotMessage(userId, messageText) {
       selectedDate,
       timeSlot
     });
-
-// ここに新しいデバッグ行を追加
-console.log('[DEBUG] ### NEW_DEBUG_MARKER_V1 ###'); // この行を追加する
-
-    if (!reservationId || !timeSlot || !selectedDate) {
-      console.warn('[WARN] キャンセル対象の情報が不完全です:', {
-        reservationId,
-        timeSlot,
-        selectedDate
-      });
-      return '⚠️ キャンセル対象の情報が不完全です。';
-    }
 
     cancelContext.delete(userId);
     return await cancelReservation(userId, reservationId, selectedDate, timeSlot);
