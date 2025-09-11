@@ -20,6 +20,26 @@ const historySheetName = process.env.GS_HISTORY_SHEET_NAME || '予約履歴';
 /**
  * ✅ 新規予約データを追記（append）
  */
+async function writeReservationData(dataArray) {
+  try {
+    const sheets = await getSheetsClient();
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: `${sheetName}!A1`,
+      valueInputOption: 'USER_ENTERED',
+      insertDataOption: 'INSERT_ROWS',
+      requestBody: { values: dataArray },
+    });
+    console.log('[INFO] 新規予約データ追加成功:', dataArray);
+  } catch (err) {
+    console.error('[ERROR] 新規予約データ追加失敗:', err.message);
+    throw err;
+  }
+}
+
+/**
+ * ✅ 予約データを全件更新（キャンセル後など）
+ */
 async function updateReservationData(dataArray) {
   try {
     const sheets = await getSheetsClient();
@@ -27,7 +47,7 @@ async function updateReservationData(dataArray) {
     // ✅ 先にシート全体をクリア（余分な行を完全削除）
     await sheets.spreadsheets.values.clear({
       spreadsheetId,
-      range: `${sheetName}!A1:Z1000`, // ← 必要に応じて範囲を広げる
+      range: `${sheetName}!A1:Z1000`,
     });
 
     // ✅ その後に新しい予約一覧を上書き保存
@@ -46,25 +66,6 @@ async function updateReservationData(dataArray) {
 }
 
 /**
- * ✅ 予約データを全件更新（キャンセル後など）
- */
-async function updateReservationData(dataArray) {
-  try {
-    const sheets = await getSheetsClient();
-    await sheets.spreadsheets.values.update({
-      spreadsheetId,
-      range: `${sheetName}!A1`,
-      valueInputOption: 'USER_ENTERED',
-      requestBody: { values: dataArray },
-    });
-    console.log('[INFO] 予約データ更新成功:', dataArray);
-  } catch (err) {
-    console.error('[ERROR] 予約データ更新失敗:', err.message);
-    throw err;
-  }
-}
-
-/**
  * ✅ 予約データを読み込む（全件取得）
  */
 async function readReservationData() {
@@ -72,7 +73,7 @@ async function readReservationData() {
     const sheets = await getSheetsClient();
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `${sheetName}!A1:I`, // I列まで（cancelledAt含む）
+      range: `${sheetName}!A1:I`,
     });
 
     const rows = response.data.values;
