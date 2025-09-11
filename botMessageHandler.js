@@ -51,43 +51,47 @@ async function handleBotMessage(userId, messageText) {
            displayList.join('\n');
   }
 
-  // ステップ②：番号選択
-  if (context?.step === 'awaitingCancelSelection') {
-    const selectedNumber = parseInt(messageText.trim(), 10);
-    const { idMap, rawReservations, cancelDate } = context;
+// ステップ②：番号選択
+if (context?.step === 'awaitingCancelSelection') {
+  const selectedNumber = parseInt(messageText.trim(), 10);
+  const { idMap, rawReservations, cancelDate } = context;
 
-    const reservationId = idMap[selectedNumber];
-    if (!reservationId) {
-      const retryList = rawReservations.map((r, i) => {
-        return `${i + 1}. 🕒 ${r[2]}｜👤 ${r[3]}｜📝 ${r[4]}｜予約枠ID: ${r[0]}`;
-      });
-      return `⚠️ 有効な番号を入力してください。\n📋 最新の予約一覧:\n` + retryList.join('\n');
-    }
-
-    const matched = rawReservations.find(r => r[0] === reservationId);
-    if (!matched) {
-      return '⚠️ 対象の予約が見つかりません。';
-    }
-
-    const selectedDate = matched[1];
-    const timeSlot = matched[2];
-
-    console.log('[DEBUG] cancelReservation() 呼び出し:', {
-      userId,
-      reservationId,
-      selectedDate,
-      timeSlot
+  const reservationId = idMap[selectedNumber];
+  if (!reservationId) {
+    const retryList = rawReservations.map((r, i) => {
+      return `${i + 1}. 🕒 ${r[3]}｜👤 ${r[4]}｜📝 ${r[5]}｜予約枠ID: ${r[0]}`;
     });
-
-    cancelContext.delete(userId);
-    const result = await cancelReservation(userId, reservationId, selectedDate, timeSlot);
-
-    if (result?.success) {
-      return `✅ キャンセルしました：🕒 ${timeSlot}｜👤 ${matched[3]}｜📝 ${matched[4]}`;
-    } else {
-      return `⚠️ キャンセルに失敗しました：🕒 ${timeSlot}｜👤 ${matched[3]}｜📝 ${matched[4]}`;
-    }
+    return `⚠️ 有効な番号を入力してください。\n📋 最新の予約一覧:\n` + retryList.join('\n');
   }
+
+  const matched = rawReservations.find(r => r[0] === reservationId);
+  if (!matched) {
+    return '⚠️ 対象の予約が見つかりません。';
+  }
+
+  // 明示的に列を指定
+  const reservationIdConfirmed = matched[0]; // 予約ID
+  const selectedDate = matched[2];           // 日付
+  const timeSlot = matched[3];               // 時間枠
+  const name = matched[4];                   // 名前
+  const note = matched[5];                   // 備考
+
+  console.log('[DEBUG] cancelReservation() 呼び出し:', {
+    userId,
+    reservationId: reservationIdConfirmed,
+    selectedDate,
+    timeSlot
+  });
+
+  cancelContext.delete(userId);
+  const result = await cancelReservation(userId, reservationIdConfirmed, selectedDate, timeSlot);
+
+  if (result?.success) {
+    return `✅ キャンセルしました：🕒 ${timeSlot}｜👤 ${name}｜📝 ${note}`;
+  } else {
+    return `⚠️ キャンセルに失敗しました：🕒 ${timeSlot}｜👤 ${name}｜📝 ${note}`;
+  }
+}
 
   // 通常コマンド処理
   const tokens = messageText.trim().split(/\s+/);

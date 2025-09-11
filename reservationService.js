@@ -120,7 +120,7 @@ async function cancelReservation(userId, reservationId, selectedDate, timeSlot) 
   }
 }
 
-/** 📋 指定日付の予約一覧取得 */
+/** 📋 指定日付の予約一覧取得（表示用） */
 async function getReservationsByDate(selectedDate) {
   const formattedDate = normalizeDate(selectedDate).replace(/-/g, '/');
   const allReservations = await readReservationData();
@@ -137,6 +137,27 @@ async function getReservationsByDate(selectedDate) {
     const [reservationId, , , timeSlot, name, note] = row;
     return `🕒 ${normalizeSlot(timeSlot)}｜👤 ${name}｜📝 ${note || 'なし'}｜予約枠ID: ${reservationId}`;
   });
+}
+
+/** 📋 指定日付の予約一覧取得（照合用 raw） */
+async function getReservationsByDateRaw(selectedDate) {
+  const formattedDate = normalizeDate(selectedDate).replace(/-/g, '/');
+  const allReservations = await readReservationData();
+
+  if (!Array.isArray(allReservations) || allReservations.length < 2) {
+    console.warn('[WARN] 予約データが空、またはヘッダーのみです');
+    return [];
+  }
+
+  const dataRows = allReservations.slice(1); // ヘッダー除去
+
+  const filtered = dataRows.filter(row => {
+    const sheetDate = String(row[2]).trim(); // row[2] = 日付
+    return sheetDate === formattedDate;
+  });
+
+  console.log(`[DEBUG] ${formattedDate} の予約件数:`, filtered.length);
+  return filtered;
 }
 
 /** 🔍 重複予約チェック */
@@ -185,6 +206,7 @@ module.exports = {
   registerReservation,
   cancelReservation,
   getReservationsByDate,
+  getReservationsByDateRaw,
   isDuplicateReservation,
   getAvailableSlots
 };
