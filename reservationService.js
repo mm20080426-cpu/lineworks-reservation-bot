@@ -1,4 +1,4 @@
-const { writeReservationData, readReservationData } = require('./sheetsWriter');
+const { writeReservationData, readReservationData, updateReservationData } = require('./sheetsWriter');
 const { isValidReservation, getAvailableTimeSlots, normalizeDate } = require('./calendarUtils');
 const { appendToHistorySheet } = require('./historyWriter');
 const crypto = require('crypto');
@@ -23,7 +23,7 @@ async function registerReservation(userId, selectedDate, timeSlot, name, note) {
   }
 
   if (await isDuplicateReservation(userId, formattedDate, timeSlot)) {
-    return `⚠️ すでに ${formattedDate} の ${timeSlot} に予約があります。`;
+    return ⚠️ すでに ${formattedDate} の ${timeSlot} に予約があります。`;
   }
 
   const timestamp = new Date().toISOString().split('T')[0];
@@ -104,13 +104,12 @@ async function cancelReservation(userId, reservationId, selectedDate, timeSlot) 
     console.log('[DEBUG] キャンセル対象行:', targetRow);
 
     const cancelledAt = new Date().toISOString().split('T')[0];
-    const historyRow = [...targetRow, 'cancelled', cancelledAt];
-
+    const historyRow = [...targetRow.slice(0, 8), 'cancelled', cancelledAt];
     await appendToHistorySheet(historyRow);
 
     const filteredRows = dataRows.filter((_, i) => i !== targetIndex);
     const updatedData = [header, ...filteredRows];
-    await writeReservationData(updatedData);
+    await updateReservationData(updatedData);
 
     console.log(`[INFO] 予約キャンセル完了: ${userId}, ${selectedDate}, ${timeSlot}, ID: ${reservationId}`);
     return `✅ 予約をキャンセルしました。\n📅 日付：${selectedDate}\n🕒 時間：${timeSlot}`;
