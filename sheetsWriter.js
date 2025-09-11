@@ -20,18 +20,27 @@ const historySheetName = process.env.GS_HISTORY_SHEET_NAME || '予約履歴';
 /**
  * ✅ 新規予約データを追記（append）
  */
-async function writeReservationData(dataArray) {
+async function updateReservationData(dataArray) {
   try {
     const sheets = await getSheetsClient();
-    await sheets.spreadsheets.values.append({
+
+    // ✅ 先にシート全体をクリア（余分な行を完全削除）
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId,
+      range: `${sheetName}!A1:Z1000`, // ← 必要に応じて範囲を広げる
+    });
+
+    // ✅ その後に新しい予約一覧を上書き保存
+    await sheets.spreadsheets.values.update({
       spreadsheetId,
       range: `${sheetName}!A1`,
       valueInputOption: 'USER_ENTERED',
       requestBody: { values: dataArray },
     });
-    console.log('[INFO] 予約データ書き込み成功:', dataArray);
+
+    console.log('[INFO] 予約データ更新成功:', dataArray);
   } catch (err) {
-    console.error('[ERROR] 予約データ書き込み失敗:', err.message);
+    console.error('[ERROR] 予約データ更新失敗:', err.message);
     throw err;
   }
 }
