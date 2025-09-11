@@ -23,7 +23,7 @@ async function registerReservation(userId, selectedDate, timeSlot, name, note) {
   }
 
   if (await isDuplicateReservation(userId, formattedDate, timeSlot)) {
-    return ⚠️ すでに ${formattedDate} の ${timeSlot} に予約があります。`;
+    return `⚠️ すでに ${formattedDate} の ${timeSlot} に予約があります。`;
   }
 
   const timestamp = new Date().toISOString().split('T')[0];
