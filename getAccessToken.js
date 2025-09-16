@@ -1,27 +1,18 @@
-const jwt = require('jsonwebtoken');
 const axios = require('axios');
-require('dotenv').config(); // 忘れずに読み込む
+const generateJWT = require('./jwtGenerator'); // ← JWT生成関数を外部から読み込む
+require('dotenv').config(); // .envから環境変数を読み込む
 
 async function getAccessToken() {
-  const payload = {
-    iss: process.env.LW_CLIENT_ID,
-    sub: process.env.LW_SERVICE_ACCOUNT,
-    iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + 3600 // 1時間
-  };
-
-  // 改行コードの復元が重要！
-  const privateKey = process.env.LW_PRIVATE_KEY.replace(/\\n/g, '\n');
-  const token = jwt.sign(payload, privateKey, { algorithm: 'RS256' });
+  const jwtToken = generateJWT(); // ✅ 毎回新しいJWTを生成
 
   try {
     const url = process.env.LW_API_TOKEN_URL;
     const params = new URLSearchParams({
       grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-      assertion: token,
+      assertion: jwtToken,
       client_id: process.env.LW_CLIENT_ID,
-      client_secret: process.env.LW_CLIENT_SECRET,
- });
+      client_secret: process.env.LW_CLIENT_SECRET
+    });
 
     const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
     const { data } = await axios.post(url, params, { headers });
@@ -35,4 +26,14 @@ async function getAccessToken() {
   }
 }
 
-module.exports = getAccessToken;
+// 🔧 即時実行ブロック（CLI実行用）
+(async () => {
+  try {
+    const accessToken = await getAccessToken();
+    console.log('\n🔑 アクセストークン:\n', accessToken);
+  } catch (err) {
+    console.error('\n❌ アクセストークン取得に失敗しました');
+  }
+})();
+
+module.exports = getAccessToken; // ✅ 他ファイルからも呼び出せるようにエクスポート

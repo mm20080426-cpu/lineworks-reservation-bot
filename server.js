@@ -3,6 +3,8 @@ const express = require('express');
 const axios = require('axios');
 const crypto = require('crypto');
 const fs = require('fs');
+const fetch = require('node-fetch'); // ← ここに追加！
+
 const {
   registerReservation,
   cancelReservation,
@@ -369,8 +371,14 @@ else if (state?.step === 'awaitingCancelSelection') {
   res.sendStatus(200);
 });
 
+// ✅ ヘルスチェック用エンドポイント
+app.get('/ping', (req, res) => {
+  res.status(200).send('OK');
+});
+
 // ✅ サーバー起動
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+const PORT = parseInt(process.env.PORT, 10) || 3000;
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`[INFO] サーバー起動完了（ポート: ${PORT}）`);
 });
+

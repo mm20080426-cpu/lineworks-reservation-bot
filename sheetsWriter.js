@@ -3,13 +3,18 @@ const path = require('path');
 
 // ✅ 認証クライアント取得関数（共通化）
 async function getSheetsClient() {
-  const keyPath = process.env.GS_CREDENTIAL_PATH || path.join(__dirname, 'google-credentials.json');
-  const auth = new google.auth.GoogleAuth({
-    keyFile: keyPath,
-    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-  });
-  const client = await auth.getClient();
-  return google.sheets({ version: 'v4', auth: client });
+  try {
+    const keyPath = process.env.GS_CREDENTIAL_PATH || path.join(__dirname, 'google-credentials.json');
+    const auth = new google.auth.GoogleAuth({
+      keyFile: keyPath,
+      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+    });
+    const client = await auth.getClient();
+    return google.sheets({ version: 'v4', auth: client });
+  } catch (err) {
+    console.error('[ERROR] Google Sheets 認証失敗:', err.message);
+    throw err;
+  }
 }
 
 // ✅ 環境変数の取得（安全性向上）
@@ -17,9 +22,11 @@ const spreadsheetId = process.env.GS_SPREADSHEET_ID;
 const sheetName = process.env.GS_SHEET_NAME;
 const historySheetName = process.env.GS_HISTORY_SHEET_NAME || '予約履歴';
 
-/**
- * ✅ 新規予約データを追記（append）
- */
+if (!spreadsheetId || !sheetName) {
+  console.warn('[WARN] 環境変数 GS_SPREADSHEET_ID または GS_SHEET_NAME が未定義です');
+}
+
+/** 📝 新規予約データを追記（append） */
 async function writeReservationData(dataArray) {
   try {
     const sheets = await getSheetsClient();
@@ -37,20 +44,18 @@ async function writeReservationData(dataArray) {
   }
 }
 
-/**
- * ✅ 予約データを全件更新（キャンセル後など）
- */
+/** 🔄 予約データを全件更新（キャンセル後など） */
 async function updateReservationData(dataArray) {
   try {
     const sheets = await getSheetsClient();
 
-    // ✅ 先にシート全体をクリア（余分な行を完全削除）
+    // ✅ 先にシート全体をクリア
     await sheets.spreadsheets.values.clear({
       spreadsheetId,
       range: `${sheetName}!A1:Z1000`,
     });
 
-    // ✅ その後に新しい予約一覧を上書き保存
+    // ✅ 新しいデータを上書き保存
     await sheets.spreadsheets.values.update({
       spreadsheetId,
       range: `${sheetName}!A1`,
@@ -65,9 +70,7 @@ async function updateReservationData(dataArray) {
   }
 }
 
-/**
- * ✅ 予約データを読み込む（全件取得）
- */
+/** 📖 予約データを読み込む（全件取得） */
 async function readReservationData() {
   try {
     const sheets = await getSheetsClient();
@@ -89,12 +92,10 @@ async function readReservationData() {
   }
 }
 
-/**
- * ✅ 履歴シートに1行追加（キャンセル時に使用）
- */
+/** 📚 履歴シートに1行追加（キャンセル時） */
 async function appendToHistorySheet(rowData) {
   try {
-    if (rowData.length === 8) {
+    if (rowData.length < 9) {
       rowData.push(new Date().toISOString().split('T')[0]);
     }
 
@@ -106,6 +107,7 @@ async function appendToHistorySheet(rowData) {
       insertDataOption: 'INSERT_ROWS',
       requestBody: { values: [rowData] },
     });
+
     console.log('[INFO] 履歴シートに追加成功:', rowData);
   } catch (err) {
     console.error('[ERROR] 履歴シート追加失敗:', err.message);
@@ -114,8 +116,8 @@ async function appendToHistorySheet(rowData) {
 }
 
 module.exports = {
-  writeReservationData,      // 新規予約（append）
-  updateReservationData,     // 全件更新（キャンセル後など）
-  readReservationData,       // 全件取得
-  appendToHistorySheet       // 履歴追加
+  writeReservationData,
+  updateReservationData,
+  readReservationData,
+  appendToHistorySheet
 };
